@@ -19,13 +19,96 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build Debug APK
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        continue-on-error: true
+
+      - name: Auto Rebuild Clean Project Structure
         run: |
-          sudo apt-get update && sudo apt-get install -y gradle
-          gradle wrapper --gradle-version 8.2
-          chmod +x gradlew
-          
-          ./gradlew :app:assembleDebug --stacktrace || gradle :app:assembleDebug --stacktrace
+          echo "=== 自动重构标准 Android 目录结构 ==="
+          # 清理错乱目录并创建规范目录
+          mkdir -p clean_app/src/main/java/com/chenzhuang/patrolreporter
+          mkdir -p clean_app/src/main/res/values
+          mkdir -p clean_app/src/main/res/xml
+
+          # 自动寻找并提取核心代码与清单
+          find . -name "MainActivity.kt" -exec cp {} clean_app/src/main/java/com/chenzhuang/patrolreporter/ \;
+          find . -name "AndroidManifest.xml" -exec cp {} clean_app/src/main/ \;
+          find . -name "strings.xml" -exec cp {} clean_app/src/main/res/values/ \;
+          find . -name "file_paths.xml" -exec cp {} clean_app/src/main/res/xml/ \;
+
+          # 替换 app 目录
+          rm -rf app
+          mv clean_app app
+
+          # 重建 app/build.gradle.kts
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.chenzhuang.patrolreporter"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.chenzhuang.patrolreporter"
+                  minSdk = 24
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          dependencies {
+              implementation("androidx.core:core-ktx:1.12.0")
+              implementation("androidx.appcompat:appcompat:1.6.1")
+              implementation("com.google.android.material:material:1.11.0")
+              implementation("org.apache.poi:poi:5.2.5")
+              implementation("org.apache.poi:poi-ooxml:5.2.5")
+          }
+          EOF
+
+          # 重建根目录 build.gradle.kts
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.2.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+          }
+          EOF
+
+          # 重建根目录 settings.gradle.kts
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "ChenZhuangPatrol"
+          include(":app")
+          EOF
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.2
+
+      - name: Build Debug APK
+        run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload APK
         if: success()
