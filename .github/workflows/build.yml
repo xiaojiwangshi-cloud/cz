@@ -21,9 +21,9 @@ jobs:
 
       - name: Auto Rebuild & Guard Project
         run: |
-          echo "=== 1. 规避 AndroidX 与编译内存问题 ==="
+          echo "=== 1. 规避 AndroidX 与 D8 编译内存 ==="
           cat << 'EOF' > gradle.properties
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           android.useAndroidX=true
           android.enableJetifier=true
           android.nonTransitiveRClass=true
@@ -34,12 +34,11 @@ jobs:
           mkdir -p clean_app/src/main/res/values
           mkdir -p clean_app/src/main/res/xml
 
-          # 抓取用户代码
+          # 提取核心代码
           find . -name "MainActivity.kt" -exec cp {} clean_app/src/main/java/com/chenzhuang/patrolreporter/ \;
           find . -name "AndroidManifest.xml" -exec cp {} clean_app/src/main/ \;
           find . -name "file_paths.xml" -exec cp {} clean_app/src/main/res/xml/ \;
 
-          # 确保必须的 strings.xml 和 values 存在，防止资源打包中断
           cat << 'EOF' > clean_app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">陈壮巡检问题</string>
@@ -49,7 +48,7 @@ jobs:
           rm -rf app
           mv clean_app app
 
-          echo "=== 3. 注入稳定版构建脚本 ==="
+          echo "=== 3. 彻底解决 D8 invoke-polymorphic 错误 ==="
           cat << 'EOF' > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -60,10 +59,11 @@ jobs:
               compileSdk = 34
               defaultConfig {
                   applicationId = "com.chenzhuang.patrolreporter"
-                  minSdk = 24
+                  minSdk = 26
                   targetSdk = 34
                   versionCode = 1
                   versionName = "1.0"
+                  multiDexEnabled = true
               }
               buildTypes {
                   release {
@@ -71,11 +71,22 @@ jobs:
                   }
               }
               compileOptions {
+                  isCoreLibraryDesugaringEnabled = true
                   sourceCompatibility = JavaVersion.VERSION_17
                   targetCompatibility = JavaVersion.VERSION_17
               }
               kotlinOptions {
                   jvmTarget = "17"
+              }
+              packaging {
+                  resources {
+                      excludes += "/META-INF/{AL2.0,LGPL2.1}"
+                      excludes += "/META-INF/DEPENDENCIES"
+                      excludes += "/META-INF/NOTICE"
+                      excludes += "/META-INF/LICENSE"
+                      excludes += "/META-INF/LICENSE.txt"
+                      excludes += "/META-INF/NOTICE.txt"
+                  }
               }
               lint {
                   abortOnError = false
@@ -83,9 +94,11 @@ jobs:
               }
           }
           dependencies {
+              coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
               implementation("androidx.core:core-ktx:1.12.0")
               implementation("androidx.appcompat:appcompat:1.6.1")
               implementation("com.google.android.material:material:1.11.0")
+              implementation("androidx.multidex:multidex:2.0.1")
               implementation("org.apache.poi:poi:5.2.5")
               implementation("org.apache.poi:poi-ooxml:5.2.5")
           }
