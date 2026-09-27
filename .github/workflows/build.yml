@@ -144,3 +144,12 @@ jobs:
         with:
           name: 陈壮巡检问题-安装包
           path: app/build/outputs/apk/debug/*.apk
+      - name: Create GitHub Release
+        if: success()
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: 陈壮巡检问题 App v1.0.${{ github.run_number }}
+          files: app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
