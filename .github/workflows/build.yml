@@ -5,9 +5,14 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Code
@@ -21,7 +26,6 @@ jobs:
 
       - name: Auto Rebuild & Guard Project
         run: |
-          echo "=== 1. 规避 AndroidX 与 D8 编译内存 ==="
           cat << 'EOF' > gradle.properties
           org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
           android.useAndroidX=true
@@ -29,12 +33,10 @@ jobs:
           android.nonTransitiveRClass=true
           EOF
 
-          echo "=== 2. 规范项目目录结构 ==="
           mkdir -p clean_app/src/main/java/com/chenzhuang/patrolreporter
           mkdir -p clean_app/src/main/res/values
           mkdir -p clean_app/src/main/res/xml
 
-          # 提取核心代码
           find . -name "MainActivity.kt" -exec cp {} clean_app/src/main/java/com/chenzhuang/patrolreporter/ \;
           find . -name "AndroidManifest.xml" -exec cp {} clean_app/src/main/ \;
           find . -name "file_paths.xml" -exec cp {} clean_app/src/main/res/xml/ \;
@@ -48,7 +50,6 @@ jobs:
           rm -rf app
           mv clean_app app
 
-          echo "=== 3. 彻底解决 D8 invoke-polymorphic 错误 ==="
           cat << 'EOF' > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -138,18 +139,15 @@ jobs:
       - name: Build Debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: 陈壮巡检问题-安装包
-          path: app/build/outputs/apk/debug/*.apk
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/debug/*.apk ./陈壮巡检问题.apk
+
       - name: Create GitHub Release
-        if: success()
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: 陈壮巡检问题 App v1.0.${{ github.run_number }}
-          files: app/build/outputs/apk/debug/*.apk
+          files: 陈壮巡检问题.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
